@@ -1,68 +1,138 @@
 import { getDB } from "../config/db.js";
 import { ObjectId } from "mongodb";
 
-// Add new contest (creator)
+
 export const addContest = async (req, res) => {
   try {
-    const { title, type, description, prize, deadline } = req.body;
-    const contestsCollection = getDB().collection("contests");
+    const db = getDB();
+    const contestsCollection = db.collection("contests");
 
-    const result = await contestsCollection.insertOne({
-      title,
-      type,
-      description,
+    const {
+      name,     
+      image,
+      details,     
       prize,
+      price,
+      task,
+      type,        
       deadline,
-      creatorId: req.user._id,
-      approved: false,
-      participants: [],
-      winner: null,
-    });
+    } = req.body;
 
-    res.status(201).json(result);
+    
+    if (!name || !image || !details || !prize || !price || !task || !type || !deadline) {
+      return res.status(400).json({ message: "All fields are required" });
+    }
+
+    const newContest = {
+      title: name,               
+      image,
+      description: details,      
+      prizeMoney: Number(prize), 
+      price: Number(price),      
+      task,
+      contestType: type,         
+      deadline: new Date(deadline),
+      // approved: false,
+      // participants: 0,
+      // winner: null,
+    };
+
+    const result = await contestsCollection.insertOne(newContest);
+
+    res.status(201).json({
+      message: "Contest added successfully",
+      contestId: result.insertedId,
+    });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error("Add contest error:", error);
+    res.status(500).json({ message: "Failed to add contest" });
   }
 };
 
-// Approve/reject contest (admin)
+/* =========================
+   ADMIN: Approve Contest
+========================= */
 export const approveContest = async (req, res) => {
   try {
-    const { contestId, approve } = req.body; // approve: true/false
-    const contestsCollection = getDB().collection("contests");
+    const db = getDB();
+    const contestsCollection = db.collection("contests");
+
+    const { contestId } = req.params;
+    if (!contestId) return res.status(400).json({ message: "Contest ID required" });
 
     const result = await contestsCollection.updateOne(
       { _id: new ObjectId(contestId) },
-      { $set: { approved: approve } }
+      { $set: { approved: true } }
     );
 
-    res.json(result);
+    if (result.modifiedCount === 0) {
+      return res.status(404).json({ message: "Contest not found or already approved" });
+    }
+
+    res.json({ message: "Contest approved successfully" });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error("Approve contest error:", error);
+    res.status(500).json({ message: "Failed to approve contest" });
   }
 };
 
-// Declare winner (creator)
+/* =========================
+   CREATOR: Declare Winner
+========================= */
 export const declareWinner = async (req, res) => {
   try {
-    const { contestId, winnerId } = req.body;
-    const contestsCollection = getDB().collection("contests");
-    const usersCollection = getDB().collection("users");
+    const db = getDB();
+    const contestsCollection = db.collection("contests");
 
-    // Update contest
-    await contestsCollection.updateOne(
-      { _id: new ObjectId(contestId), creatorId: req.user._id },
-      { $set: { winner: new ObjectId(winnerId) } }
+    const { contestId, winner } = req.body;
+    if (!contestId || !winner) return res.status(400).json({ message: "Contest ID and winner required" });
+
+    const result = await contestsCollection.updateOne(
+      { _id: new ObjectId(contestId) },
+      { $set: { winner } }
     );
 
-    // Update user
-    await usersCollection.updateOne(
-      { _id: new ObjectId(winnerId) },
-      { $push: { wonContests: new ObjectId(contestId) } }
-    );
+    if (result.modifiedCount === 0) {
+      return res.status(404).json({ message: "Contest not found or winner already declared" });
+    }
 
-    res.json({ message: "Winner declared" });
+    res.json({ message: "Winner declared successfully" });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error("Declare winner error:", error);
+    res.status(500).json({ message: "Failed to declare winner" });
   }
 };
+
+/* =========================
+   PUBLIC: Get Approved Contests
+========================= */
+export const getApprovedContests = async (req, res) => {
+  try {
+    const db = getDB();
+    const contestsCollection = db.collection("contests");
+
+    const contests = await contestsCollection.find({ approved: true }).toArray();
+
+    // Map backend fields to frontend-friendly fields
+    const response = contests.map(c => ({
+      id: c._id,
+      name: c.title,
+      type: c.contestType,
+      image: c.image,
+      participants: c.participants || 0,
+      short_description: c.short_description || "",
+      details: c.description,
+      task: c.task,
+      prize: c.prizeMoney,
+      winner: c.winner || null,
+      deadline: c.deadline,
+    }));
+
+    res.json(response);
+  } catch (error) {
+    console.error("Get contests error:", error);
+    res.status(500).json({ message: "Failed to fetch contests" });
+  }
+};
+
+

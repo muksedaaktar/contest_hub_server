@@ -5,21 +5,21 @@ import {
   getAllUsers,
   updateUserRole,
   updateUserProfile,
-  getUserContests
+  getUserContests,
+  createUser 
 } from "../controllers/userController.js";
 
 const router = express.Router();
 
-// Admin: get all users
+// Admin routes
 router.get("/", authMiddleware, permit("admin"), getAllUsers);
+router.patch("/role/:userId", authMiddleware, permit("admin"), updateUserRole);
 
-// Admin: change user role
-router.put("/role/:userId", authMiddleware, permit("admin"), updateUserRole);
-
-// Normal user: update own profile
-router.put("/profile", authMiddleware, updateUserProfile);
-
-// Normal user: see participated & won contests
+// User routes
+router.patch("/profile", authMiddleware, updateUserProfile);
 router.get("/my-contests", authMiddleware, getUserContests);
+
+// ✅ New POST route for registration (MongoDB save)
+router.post("/", createUser);
 
 export default router;
